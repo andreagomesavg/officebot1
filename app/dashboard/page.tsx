@@ -200,8 +200,8 @@ export default function Dashboard() {
                     <th>Estado Limp.</th>
                     <th>Últ. Almuerzo</th>
                     <th>Últ. Limpieza</th>
-                    <th className="sortable" onClick={() => toggleSort('almuerzo')}>Turnos A. <SortIcon col="almuerzo" /></th>
-                    <th className="sortable" onClick={() => toggleSort('limpieza')}>Turnos L. <SortIcon col="limpieza" /></th>
+                    <th className="sortable" onClick={() => toggleSort('almuerzo')}>Turnos Almuerzo. <SortIcon col="almuerzo" /></th>
+                    <th className="sortable" onClick={() => toggleSort('limpieza')}>Turnos Limpieza. <SortIcon col="limpieza" /></th>
                     <th className="sortable" onClick={() => toggleSort('rebotes')}>Rebotes <SortIcon col="rebotes" /></th>
                     <th style={{textAlign:'right'}}>Acciones</th>
                   </tr>
