@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   try {
     // Traemos todo de la tabla personas
-    const [rows] = await pool.query('SELECT * FROM personas');
+    const [rows]: [any, any] = await pool.query('SELECT * FROM personas');
     return NextResponse.json(rows);
   } catch (error: any) {
     console.error("Error en DB:", error);
