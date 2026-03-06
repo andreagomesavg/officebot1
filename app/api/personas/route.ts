@@ -1,12 +1,13 @@
 import pool from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { RowDataPacket } from 'mysql2';
 
 
 
 export async function GET() {
   try {
     // Traemos todo de la tabla personas
-    const [rows]: [any, any] = await pool.query('SELECT * FROM personas');
+    const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM personas');
     return NextResponse.json(rows);
   } catch (error: any) {
     console.error("Error en DB:", error);
