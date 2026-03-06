@@ -3,16 +3,13 @@ import { Persona } from '@/types';
 import { useEffect, useState } from 'react';
 
 export default function SorteoPage() {
-  // Aseguramos que siempre sea un array al inicio
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [sorteoActivo, setSorteoActivo] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
   const [almuerzoWinners, setAlmuerzoWinners] = useState<Persona[]>([]);
   const [limpiezaWinner, setLimpiezaWinner] = useState<Persona | null>(null);
-  
   const [almuerzoPool, setAlmuerzoPool] = useState<Persona[]>([]);
   const [limpiezaPool, setLimpiezaPool] = useState<Persona[]>([]);
 
@@ -25,7 +22,6 @@ export default function SorteoPage() {
     try {
       const res = await fetch('/api/personas', { cache: 'no-store' });
       const data = await res.json();
-      // Si la data no es un array, ponemos uno vacío para evitar el crash
       setPersonas(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error("Error al cargar personas:", e);
@@ -35,7 +31,12 @@ export default function SorteoPage() {
     }
   };
 
-  // BLINDAJE: Usamos (personas || []) para que .filter nunca falle
+  const formatFecha = (fecha: string | null) => {
+    if (!fecha) return 'Nunca';
+    const d = new Date(fecha);
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  };
+
   const obtenerTurnoActual = () => {
     const lista = Array.isArray(personas) ? personas : [];
     const almuerzos = lista.filter(p => p.almuerzo === 'Le toca');
@@ -44,10 +45,6 @@ export default function SorteoPage() {
   };
   
   const turnoActual = obtenerTurnoActual();
-
-  // BLINDAJE: También aquí para los excluidos
-  const excluidosAlmuerzo = (personas || []).filter(p => p.almuerzo === 'No puede');
-  const excluidosLimpieza = (personas || []).filter(p => p.limpieza === 'No puede');
 
   const sortSorteo = (a: Persona, b: Persona, tipo: 'almuerzo' | 'limpieza') => {
     const vecesA = tipo === 'almuerzo' ? a.veces_almuerzo : a.veces_limpieza;
@@ -58,38 +55,6 @@ export default function SorteoPage() {
     const timeA = dateA ? new Date(dateA).getTime() : 0; 
     const timeB = dateB ? new Date(dateB).getTime() : 0;
     return timeA - timeB || a.nombre.localeCompare(b.nombre); 
-  };
-
-  const sustituirTitular = async (titularActual: Persona, tipo: 'almuerzo' | 'limpieza') => {
-    const elegibles = personas.filter(p => {
-      const estado = tipo === 'almuerzo' ? p.almuerzo : p.limpieza;
-      if (estado === 'No puede') return false;
-      if (tipo === 'almuerzo') return !turnoActual.almuerzos.some(t => t.id === p.id);
-      return turnoActual.limpieza?.id !== p.id;
-    }).sort((a, b) => sortSorteo(a, b, tipo));
-
-    const sustituto = elegibles[0];
-    if (!sustituto) return alert("No hay nadie disponible para sustituir.");
-    if (!confirm(`¿Cambiar a ${titularActual.nombre} por ${sustituto.nombre}?`)) return;
-
-    setGuardando(true);
-    const ahora = new Date().toISOString();
-    const vecesKey = tipo === 'almuerzo' ? 'veces_almuerzo' : 'veces_limpieza';
-    const dateKey = tipo === 'almuerzo' ? 'ultimo_almuerzo' : 'ultima_limpieza';
-
-    try {
-      await fetch('/api/personas', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: titularActual.id, [vecesKey]: Math.max(0, titularActual[vecesKey] - 1), [dateKey]: null, [tipo]: null }),
-      });
-      await fetch('/api/personas', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: sustituto.id, [vecesKey]: sustituto[vecesKey] + 1, [dateKey]: ahora, [tipo]: 'Le toca' }),
-      });
-      await fetchPersonas();
-    } catch (e) { alert("Error al sustituir."); } finally { setGuardando(false); }
   };
 
   const iniciarSorteo = () => {
@@ -105,15 +70,12 @@ export default function SorteoPage() {
   const confirmarResultados = async () => {
     setGuardando(true);
     const ahora = new Date().toISOString();
-
     try {
       const requests = [];
       for (const p of personas) {
         let changed = false;
         let patchData: any = { id: p.id };
-
-        const esNuevoAlmuerzo = almuerzoWinners.some(w => w.id === p.id);
-        if (esNuevoAlmuerzo) {
+        if (almuerzoWinners.some(w => w.id === p.id)) {
           patchData.almuerzo = 'Le toca';
           patchData.veces_almuerzo = p.veces_almuerzo + 1;
           patchData.ultimo_almuerzo = ahora;
@@ -122,9 +84,7 @@ export default function SorteoPage() {
           patchData.almuerzo = null;
           changed = true;
         }
-
-        const esNuevoLimpieza = limpiezaWinner?.id === p.id;
-        if (esNuevoLimpieza) {
+        if (limpiezaWinner?.id === p.id) {
           patchData.limpieza = 'Le toca';
           patchData.veces_limpieza = p.veces_limpieza + 1;
           patchData.ultima_limpieza = ahora;
@@ -133,7 +93,6 @@ export default function SorteoPage() {
           patchData.limpieza = null;
           changed = true;
         }
-
         if (changed) {
           requests.push(fetch('/api/personas', {
             method: 'PATCH',
@@ -159,10 +118,11 @@ export default function SorteoPage() {
         .btn-large:hover { background: #b01e7a; transform: translateY(-1px); }
         .cards-grid { display: grid; grid-template-columns: 1fr; gap: 24px; margin-top: 24px; }
         @media (min-width: 768px) { .cards-grid { grid-template-columns: 1fr 1fr; } }
-        .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); position: relative; overflow: hidden; }
         .winner-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: #fafafa; border-radius: 8px; margin-top: 8px; }
-        .excluidos-box { margin-top: 32px; background: #fff; border: 1px dashed #e5e7eb; border-radius: 12px; padding: 20px; }
-        .excluido-tag { background: #f3f4f6; color: #666; padding: 4px 10px; border-radius: 20px; font-size: 12px; border: 1px solid #e5e7eb; display: inline-block; margin: 4px; }
+        .name-info b { display: block; font-size: 15px; }
+        .name-info span { font-size: 11px; color: #888; }
+        .badge { position: absolute; top: 12px; right: -30px; background: #df30a4; color: white; font-size: 10px; font-weight: 800; padding: 4px 35px; transform: rotate(45deg); text-transform: uppercase; letter-spacing: 1px; }
       `}</style>
 
       <div className="page">
@@ -172,7 +132,7 @@ export default function SorteoPage() {
         </div>
 
         {loading ? (
-            <div style={{textAlign: 'center', padding: '50px', color: '#888'}}>Cargando datos del equipo...</div>
+            <div style={{textAlign: 'center', padding: '50px', color: '#888'}}>Cargando datos...</div>
         ) : !sorteoActivo ? (
           <>
             <div className="cards-grid">
@@ -181,8 +141,10 @@ export default function SorteoPage() {
                 {turnoActual.almuerzos.length === 0 ? <p>Sin sorteo.</p> :
                   turnoActual.almuerzos.map(p => (
                     <div className="winner-row" key={p.id}>
-                      <b>{p.nombre}</b>
-                      <button onClick={() => sustituirTitular(p, 'almuerzo')} style={{cursor:'pointer', fontSize: 11}}>🔄 Sustituir</button>
+                      <div className="name-info">
+                        <b>{p.nombre}</b>
+                        <span>Último: {formatFecha(p.ultimo_almuerzo)}</span>
+                      </div>
                     </div>
                   ))
                 }
@@ -191,8 +153,10 @@ export default function SorteoPage() {
                 <div style={{fontWeight: 700, marginBottom: 12}}>🧹 Limpieza Vigente</div>
                 {turnoActual.limpieza ? (
                   <div className="winner-row">
-                    <b>{turnoActual.limpieza.nombre}</b>
-                    <button onClick={() => sustituirTitular(turnoActual.limpieza!, 'limpieza')} style={{cursor:'pointer', fontSize: 11}}>🔄 Sustituir</button>
+                    <div className="name-info">
+                      <b>{turnoActual.limpieza.nombre}</b>
+                      <span>Último: {formatFecha(turnoActual.limpieza.ultima_limpieza)}</span>
+                    </div>
                   </div>
                 ) : <p>Sin sorteo.</p>}
               </div>
@@ -204,44 +168,79 @@ export default function SorteoPage() {
         ) : (
           <>
             <div className="cards-grid">
-              <div className="card">
+              <div className="card" style={{borderColor: '#df30a4'}}>
+                <div className="badge">Borrador</div>
                 <div style={{fontWeight: 700, marginBottom: 12, color:'#df30a4'}}>🥪 Propuesta Almuerzo</div>
                 {almuerzoWinners.map((winner, index) => (
                   <div className="winner-row" key={winner.id}>
-                    <b>{winner.nombre}</b>
-                    <button onClick={() => {
-                      if (almuerzoPool.length === 0) return alert("Sin suplentes");
+                    <div className="name-info">
+                      <b>{winner.nombre}</b>
+                      <span>Último: {formatFecha(winner.ultimo_almuerzo)} ({winner.veces_almuerzo} veces)</span>
+                    </div>
+                    <button style={{background:'none', border:'none', cursor:'pointer', fontSize: 18}} onClick={() => {
                       const w = [...almuerzoWinners]; const p = [...almuerzoPool];
-                      w[index] = p.shift()!; setAlmuerzoWinners(w); setAlmuerzoPool(p);
+                      if (p.length > 0) {
+                        const oldWinner = w[index];
+                        w[index] = p.shift()!;
+                        p.push(oldWinner);
+                        setAlmuerzoWinners(w); setAlmuerzoPool(p);
+                      }
                     }}>🎲</button>
                   </div>
                 ))}
               </div>
-              <div className="card">
+
+              <div className="card" style={{borderColor: '#df30a4'}}>
+                <div className="badge">Borrador</div>
                 <div style={{fontWeight: 700, marginBottom: 12, color:'#df30a4'}}>🧹 Propuesta Limpieza</div>
                 {limpiezaWinner && (
                   <div className="winner-row">
-                    <b>{limpiezaWinner.nombre}</b>
-                    <button onClick={() => {
-                      if (limpiezaPool.length === 0) return alert("Sin suplentes");
-                      const p = [...limpiezaPool]; setLimpiezaWinner(p.shift()!); setLimpiezaPool(p);
+                    <div className="name-info">
+                      <b>{limpiezaWinner.nombre}</b>
+                      <span>Último: {formatFecha(limpiezaWinner.ultima_limpieza)} ({limpiezaWinner.veces_limpieza} veces)</span>
+                    </div>
+                    <button style={{background:'none', border:'none', cursor:'pointer', fontSize: 18}} onClick={() => {
+                      const p = [...limpiezaPool];
+                      if (p.length > 0) {
+                        const oldWinner = limpiezaWinner;
+                        setLimpiezaWinner(p.shift()!);
+                        p.push(oldWinner);
+                        setLimpiezaPool(p);
+                      }
                     }}>🎲</button>
                   </div>
                 )}
               </div>
             </div>
-
-            {(excluidosAlmuerzo.length > 0 || excluidosLimpieza.length > 0) && (
-              <div className="excluidos-box">
-                <p style={{fontSize:13, fontWeight:700, color:'#888', marginBottom:10}}>🚫 Excluidos :</p>
-                {excluidosAlmuerzo.map(p => <span key={p.id} className="excluido-tag">🥪 {p.nombre}</span>)}
-                {excluidosLimpieza.map(p => <span key={p.id} className="excluido-tag">🧹 {p.nombre}</span>)}
+            {/* BLOQUE DE CONTEXTO: LISTA DE SUPLENTES */}
+              <div style={{ marginTop: 24, padding: 16, background: '#fff', borderRadius: 12, border: '1px solid #eee' }}>
+                <p style={{ fontWeight: 700, fontSize: 14, marginBottom: 10, color: '#df30a4' }}>📊 Próximos en lista (Suplentes):</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                  <div>
+                    <p style={{ fontSize: 11, fontWeight: 800, color: '#999', textTransform: 'uppercase', marginBottom: 5 }}>Sig. Almuerzo</p>
+                    {almuerzoPool.slice(0, 3).map(p => (
+                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666', padding: '4px 0', borderBottom: '1px solid #f9f9f9' }}>
+                        <span>{p.nombre}</span>
+                        <span>{p.veces_almuerzo} veces</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 11, fontWeight: 800, color: '#999', textTransform: 'uppercase', marginBottom: 5 }}>Sig. Limpieza</p>
+                    {limpiezaPool.slice(0, 3).map(p => (
+                      <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666', padding: '4px 0', borderBottom: '1px solid #f9f9f9' }}>
+                        <span>{p.nombre}</span>
+                        <span>{p.veces_limpieza} veces</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            )}
 
             <div style={{textAlign:'center', marginTop:40}}>
               <button className="btn-large" onClick={confirmarResultados} disabled={guardando}>✓ Guardar Nuevos Turnos</button>
-              <button onClick={() => setSorteoActivo(false)} style={{marginLeft:20, background:'none', border:'none', color:'#888', cursor:'pointer'}}>Cancelar</button>
+              <br />
+              <button onClick={() => setSorteoActivo(false)} style={{marginTop:20, background:'none', border:'none', color:'#888', cursor:'pointer', fontSize:14, textDecoration:'underline'}}>Cancelar</button>
             </div>
           </>
         )}
